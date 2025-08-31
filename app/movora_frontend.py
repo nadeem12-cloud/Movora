@@ -1,60 +1,74 @@
-import os
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import re
 
-st.set_page_config(page_title="Movora - Vehicle Recommender", layout="wide")
+# --- Load dataset ---
+@st.cache_data
+def load_data():
+    df = pd.read_csv("Data/raw/All_cars_dataset.csv")
 
-# ✅ Try both local + Streamlit paths
-possible_paths = [
-    os.path.join("Data", "raw", "All_cars_dataset.csv"),   # local dev
-    os.path.join("app", "Data", "raw", "All_cars_dataset.csv"),  # if structure shifts
-    "All_cars_dataset.csv"  # fallback if kept at root
-]
+    # Normalize column names (strip spaces, lower case)
+    df.columns = df.columns.str.strip()
 
-file_path = None
-for path in possible_paths:
-    if os.path.exists(path):
-        file_path = path
-        break
+    # Try to detect price column (handles "Price", "price", etc.)
+    price_col = None
+    for col in df.columns:
+        if col.lower() == "price":
+            price_col = col
+            break
 
-if not file_path:
-    st.error("❌ Dataset not found! Please make sure `All_cars_dataset.csv` is inside `Data/raw/` and committed to GitHub.")
-    st.stop()
+    if price_col is None:
+        st.error("❌ No 'Price' column found in dataset.")
+        return df
 
-# ✅ Load dataset
-df = pd.read_csv(file_path)
-st.success(f"✅ Using dataset: {file_path} ({len(df)} rows)")
+    # Convert price values
+    df["price_cleaned"] = df[price_col].apply(convert_price)
+    return df
 
-# --- Preprocess price ---
+
+# --- Convert Price Strings ("Lakh", "Crore") to numeric (in Lakhs) ---
 def convert_price(price_str):
-    """Convert '69.98 Lakh' or '1.2 Crore' into numeric INR value"""
-    if isinstance(price_str, str):
-        price_str = price_str.strip().lower()
-        if "lakh" in price_str:
-            return float(price_str.replace("lakh", "").strip()) * 1e5
-        elif "crore" in price_str:
-            return float(price_str.replace("crore", "").strip()) * 1e7
-        else:
-            try:
-                return float(price_str)
-            except:
-                return None
-    return price_str
+    if pd.isna(price_str):
+        return None
+    price_str = str(price_str).replace(",", "").strip()
 
-df["price_cleaned"] = df["price"].apply(convert_price)
+    match = re.match(r"([\d\.]+)\s*(Lakh|Crore)", price_str, re.IGNORECASE)
+    if not match:
+        return None
+
+    value, unit = match.groups()
+    value = float(value)
+
+    if unit.lower() == "crore":
+        return value * 100  # 1 Crore = 100 Lakhs
+    return value  # already in Lakhs
+
+
+# --- Load data ---
+df = load_data()
 
 # --- Sidebar controls ---
-st.sidebar.header("🔍 Filter Vehicles")
-min_price = st.sidebar.selectbox("Min Price (₹)", sorted(df["price_cleaned"].dropna().unique()))
-max_price = st.sidebar.selectbox("Max Price (₹)", sorted(df["price_cleaned"].dropna().unique(), reverse=True))
+st.sidebar.header("🔍 Filter Options")
 
-if min_price >= max_price:
-    st.warning("⚠ Please select a valid min < max price range")
+if "price_cleaned" in df.columns:
+    min_price = float(df["price_cleaned"].min())
+    max_price = float(df["price_cleaned"].max())
+
+    selected_min = st.sidebar.selectbox("Minimum Price", sorted(df["price_cleaned"].unique()), index=0)
+    selected_max = st.sidebar.selectbox("Maximum Price", sorted(df["price_cleaned"].unique()), index=len(df["price_cleaned"].unique()) - 1)
+
+    # Filter data
+    filtered_df = df[(df["price_cleaned"] >= selected_min) & (df["price_cleaned"] <= selected_max)]
 else:
-    results = df[(df["price_cleaned"] >= min_price) & (df["price_cleaned"] <= max_price)]
+    st.warning("⚠️ No price data available, showing all vehicles.")
+    filtered_df = df
 
-    st.subheader(f"🚗 Vehicles between ₹{min_price:,.0f} and ₹{max_price:,.0f}")
-    if results.empty:
-        st.warning("⚠ No vehicles found in this range.")
-    else:
-        st.dataframe(results[["name", "price", "mileage", "engine", "fuel_type", "seating_capacity", "top_speed"]])
+# --- Main content ---
+st.title("🚗 Movora - Vehicle Recommender")
+st.subheader("📋 Matching Vehicles")
+
+if filtered_df.empty:
+    st.warning("⚠️ No vehicles found for the selected criteria.")
+else:
+    st.dataframe(filtered_df)
+    st.caption(f"Showing {len(filtered_df)} results from {len(df)} total vehicles.")
