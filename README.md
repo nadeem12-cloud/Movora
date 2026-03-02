@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.x-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-red?style=for-the-badge&logo=streamlit)](https://streamlit.io)
 [![Dataset](https://img.shields.io/badge/Dataset-Kaggle-20BEFF?style=for-the-badge&logo=kaggle)](https://kaggle.com)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-movora.streamlit.app-brightgreen?style=for-the-badge&logo=streamlit)](https://movora.streamlit.app)
 
 ---
 
@@ -48,12 +49,7 @@ cd Movora
 pip install -r requirements.txt
 ```
 
-### 3. Run the app
-```bash
-streamlit run app.py
-```
-
----
+Or visit the live app: **[movora.streamlit.app](https://movora.streamlit.app)**
 
 ## 📁 Project Structure
 
